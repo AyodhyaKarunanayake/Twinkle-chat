@@ -98,6 +98,40 @@ const Chat = () => {
     }
   }, [onlineUsers]);
 
+  // Store chat history per user
+  const [userChats, setUserChats] = useState({});
+
+  // When a message is received, update the correct chat
+  useEffect(() => {
+    if (!messages.length) return;
+    setUserChats(prev => {
+      const lastMsg = messages[messages.length - 1];
+      const otherUserId = String(lastMsg.sender?._id || lastMsg.sender) === String(user._id)
+        ? String(lastMsg.recipient?._id || lastMsg.recipient)
+        : String(lastMsg.sender?._id || lastMsg.sender);
+      const chatKey = otherUserId;
+      const prevMsgs = prev[chatKey] || [];
+      // Avoid duplicate messages
+      if (prevMsgs.some(m => m._id === lastMsg._id)) return prev;
+      return {
+        ...prev,
+        [chatKey]: [...prevMsgs, lastMsg]
+      };
+    });
+  }, [messages, user._id]);
+
+  // When switching users, load their chat history
+  useEffect(() => {
+    if (!selectedUser) return;
+    const chatKey = selectedUser.userId;
+    // Filter all messages for this user
+    const filtered = messages.filter(msg =>
+      (String(msg.sender?._id || msg.sender) === String(user._id) && String(msg.recipient?._id || msg.recipient) === String(chatKey)) ||
+      (String(msg.sender?._id || msg.sender) === String(chatKey) && String(msg.recipient?._id || msg.recipient) === String(user._id))
+    );
+    setUserChats(prev => ({ ...prev, [chatKey]: filtered }));
+  }, [selectedUser, messages, user._id]);
+
   // Handle sending messages
   const handleSendMessage = (e) => {
     e.preventDefault();
@@ -220,12 +254,21 @@ const Chat = () => {
         </div>
       </div>
 
-      <div className="chat-body">
+      <div className="chat-body" style={{ display: 'flex', height: 'calc(100vh - 64px)', overflow: 'hidden' }}>
         {/* Sidebar with online users */}
-        <div className="sidebar">
-          <div className="online-users">
-            <h3>Online Users ({onlineUsers.length})</h3>
-            <div className="user-list">
+        <div className="sidebar" style={{ height: '100%', display: 'flex', flexDirection: 'column', minWidth: 220, flexShrink: 0, overflow: 'hidden' }}>
+          <div className="online-users" style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <h3 style={{ flexShrink: 0 }}>Online Users ({onlineUsers.length})</h3>
+            <div
+              className="user-list"
+              style={{
+                flex: 1,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                paddingRight: 4,
+                minHeight: 0
+              }}
+            >
               {onlineUsers.map((onlineUser) => (
                 <div
                   key={onlineUser.userId}
@@ -242,17 +285,14 @@ const Chat = () => {
         </div>
 
         {/* Main chat area */}
-        <div className="chat-main">
+        <div className="chat-main" style={{ flex: 1, height: '100%', overflowY: 'auto', minWidth: 0 }}>
           {/* Only show chat if a user is selected */}
           {selectedUser ? (
             <div className="messages-container">
-              {/* Filter messages for selected user and group by date */}
+              {/* Show only the chat for the selected user */}
               {(() => {
-                // Filter messages for selected user (both directions)
-                const filteredMessages = messages.filter(msg =>
-                  (String(msg.sender?._id || msg.sender) === String(user._id) && String(msg.recipient?._id || msg.recipient) === String(selectedUser.userId)) ||
-                  (String(msg.sender?._id || msg.sender) === String(selectedUser.userId) && String(msg.recipient?._id || msg.recipient) === String(user._id))
-                );
+                const chatKey = selectedUser.userId;
+                const filteredMessages = userChats[chatKey] || [];
                 if (filteredMessages.length === 0) {
                   return (
                     <div className="no-messages">
